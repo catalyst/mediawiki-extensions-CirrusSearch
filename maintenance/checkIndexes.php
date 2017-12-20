@@ -3,7 +3,6 @@
 namespace CirrusSearch;
 
 use CirrusSearch\Maintenance\Maintenance;
-use CirrusSearch\Maintenance\MetaStoreIndex;
 
 /**
  * Check that all Cirrus indexes report OK.
@@ -96,10 +95,11 @@ class CheckIndexes extends Maintenance {
 	}
 
 	private function checkMetastore( array $aliases ) {
-		$this->in( MetaStoreIndex::INDEX_NAME );
-		if ( isset( $aliases[ MetaStoreIndex::INDEX_NAME ] ) ) {
-			$this->check( 'alias count', 1, count( $aliases[ MetaStoreIndex::INDEX_NAME ] ) );
-			foreach ( $aliases[ MetaStoreIndex::INDEX_NAME ] as $indexName ) {
+		global $wgCirrusSearchMetastoreIndexName;
+		$this->in( $wgCirrusSearchMetastoreIndexName );
+		if ( isset( $aliases[ $wgCirrusSearchMetastoreIndexName ] ) ) {
+			$this->check( 'alias count', 1, count( $aliases[ $wgCirrusSearchMetastoreIndexName ] ) );
+			foreach ( $aliases[ $wgCirrusSearchMetastoreIndexName ] as $indexName ) {
 				$this->checkIndex( $indexName, 1 );
 			}
 		} else {
@@ -240,11 +240,12 @@ class CheckIndexes extends Maintenance {
 	}
 
 	private function ensureCirrusInfoFetched() {
+		global $wgCirrusSearchMetastoreIndexName;
 		if ( $this->cirrusInfo === null ) {
 			$query = new \Elastica\Query();
 			$query->setSize( 5000 );
 			$res = $this->getConnection()
-				->getIndex( MetaStoreIndex::INDEX_NAME )
+				->getIndex( $wgCirrusSearchMetastoreIndexName )
 				->getType( 'version' )
 				->search( $query );
 			$this->cirrusInfo = [];

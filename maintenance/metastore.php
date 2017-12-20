@@ -136,7 +136,8 @@ class Metastore extends Maintenance {
 	}
 
 	private function dump() {
-		$index = $this->getConnection()->getIndex( MetaStoreIndex::INDEX_NAME );
+		global $wgCirrusSearchMetastoreIndexName;
+		$index = $this->getConnection()->getIndex( $wgCirrusSearchMetastoreIndexName );
 		if ( !$index->exists() ) {
 			$this->fatalError( "Cannot dump metastore: index does not exists. Please run --upgrade first" );
 		}

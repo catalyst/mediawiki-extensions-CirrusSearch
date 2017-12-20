@@ -1389,6 +1389,13 @@ $wgResourceModules += [
 ];
 
 /**
+ * Metastore index name. If your elasticsearch cluster is shared with multiple
+ * MediaWiki instances and other projects, or has more complex ACL, you may need
+ * to set this to a different value.
+ */
+$wgCirrusSearchMetastoreIndexName = \CirrusSearch\Maintenance\MetaStoreIndex::DEFAULT_INDEX_NAME;
+
+/**
  * Mapping of result types to CirrusSearch classes.
  */
 $wgCirrusSearchFieldTypes = [
