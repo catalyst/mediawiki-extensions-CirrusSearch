@@ -46,9 +46,10 @@ class MetaStoreIndex {
 	const METASTORE_VERSION_DOCID = 'metastore_version';
 
 	/**
-	 * @const string index name
+	 * @const string default index name if not provided as a setting, see
+	 * $wgCirrusSearchMetastoreIndexName
 	 */
-	const INDEX_NAME = 'mw_cirrus_metastore';
+	const DEFAULT_INDEX_NAME = 'mw_cirrus_metastore';
 
 	/**
 	 * @const string previous index name (bc code)
@@ -86,6 +87,11 @@ class MetaStoreIndex {
 	private $client;
 
 	/**
+	 * @var string metastore index name, from settings
+	 */
+	private $indexName;
+
+	/**
 	 * @var Maintenance|null initiator maintenance script
 	*/
 	private $out;
@@ -106,8 +112,10 @@ class MetaStoreIndex {
 	 * @param string $masterTimeout
 	 */
 	public function __construct( Connection $connection, Maintenance $out, $masterTimeout = '10000s' ) {
+		global $wgCirrusSearchMetastoreIndexName;
 		$this->connection = $connection;
 		$this->client = $connection->getClient();
+		$this->indexName = $wgCirrusSearchMetastoreIndexName;
 		$this->configUtils = new ConfigUtils( $this->client, $out );
 		$this->out = $out;
 		$this->masterTimeout = $masterTimeout;
@@ -135,17 +143,17 @@ class MetaStoreIndex {
 		$this->fixOldName();
 		// If the mw_cirrus_metastore alias still not exists it
 		// means we need to create everything from scratch.
-		if ( !$this->client->getIndex( self::INDEX_NAME )->exists() ) {
-			$this->log( self::INDEX_NAME . " missing creating.\n" );
+		if ( !$this->client->getIndex( $this->indexName )->exists() ) {
+			$this->log( $this->indexName . " missing creating.\n" );
 			$newIndex = $this->createNewIndex();
 			$this->switchAliasTo( $newIndex );
 		} else {
 			list( $major, $minor ) = $this->metastoreVersion();
 			if ( $major < self::METASTORE_MAJOR_VERSION ) {
-				$this->log( self::INDEX_NAME . " major version mismatch upgrading.\n" );
+				$this->log( $this->indexName . " major version mismatch upgrading.\n" );
 				$this->majorUpgrade();
 			} elseif( $major == self::METASTORE_MAJOR_VERSION && $minor < self::METASTORE_MINOR_VERSION ) {
-				$this->log( self::INDEX_NAME . " minor version mismatch trying to upgrade mapping.\n" );
+				$this->log( $this->indexName . " minor version mismatch trying to upgrade mapping.\n" );
 				$this->minorUpgrade();
 			} elseif ( $major > self::METASTORE_MAJOR_VERSION || $minor > self::METASTORE_MINOR_VERSION ) {
 				throw new \Exception( "Metastore version $major.$minor found, cannot upgrade to a lower version: " . self::METASTORE_MAJOR_VERSION . "." . self::METASTORE_MINOR_VERSION );
@@ -159,7 +167,7 @@ class MetaStoreIndex {
 	 * @return \Elastica\Index the newly created index
 	 */
 	public function createNewIndex( $suffix = 'first' ) {
-		$name = self::INDEX_NAME . '_' . $suffix;
+		$name = $this->indexName . '_' . $suffix;
 		$this->log( "Creating metastore index... $name" );
 		// Don't forget to update METASTORE_MAJOR_VERSION when changing something
 		// in the settings
@@ -242,7 +250,7 @@ class MetaStoreIndex {
 	}
 
 	private function minorUpgrade() {
-		$index = $this->connection->getIndex( self::INDEX_NAME );
+		$index = $this->connection->getIndex( $this->indexName );
 		foreach( $this->buildMapping() as $type => $mapping ) {
 			$index->getType( $type )->request(
 				'_mapping',
@@ -264,9 +272,9 @@ class MetaStoreIndex {
 		$name = $index->getName();
 		$oldIndexName = $this->getAliasedIndexName();
 		if ( $oldIndexName !== null ) {
-			$this->log( "Switching " . self::INDEX_NAME . " alias from $oldIndexName to $name.\n" );
+			$this->log( "Switching " . $this->indexName . " alias from $oldIndexName to $name.\n" );
 		} else {
-			$this->log( "Creating " . self::INDEX_NAME . " alias to $name.\n" );
+			$this->log( "Creating " . $this->indexName . " alias to $name.\n" );
 		}
 
 		if ( $oldIndexName == $name ) {
@@ -278,7 +286,7 @@ class MetaStoreIndex {
 			[
 				'add' => [
 					'index' => $name,
-					'alias' => self::INDEX_NAME,
+					'alias' => $this->indexName,
 				]
 			],
 		] ];
@@ -286,7 +294,7 @@ class MetaStoreIndex {
 			$data['actions'][] = [
 					'remove' => [
 						'index' => $oldIndexName,
-						'alias' => self::INDEX_NAME,
+						'alias' => $this->indexName,
 					]
 				];
 		}
@@ -299,23 +307,23 @@ class MetaStoreIndex {
 	}
 
 	/**
-	 * @return string|null the current index behind the self::INDEX_NAME
+	 * @return string|null the current index behind the $this->indexName
 	 * alias or null if the alias does not exist
 	 */
 	private function getAliasedIndexName() {
 		// FIXME: Elastica seems to have trouble parsing the error reason
 		// for this endpoint. Running a simple HEAD first to check if it
 		// exists
-		$resp = $this->client->request( '_alias/' . self::INDEX_NAME, \Elastica\Request::HEAD, [] );
+		$resp = $this->client->request( '_alias/' . $this->indexName, \Elastica\Request::HEAD, [] );
 		if ( $resp->getStatus() === 404 ) {
 			return null;
 		}
-		$resp = $this->client->request( '_alias/' . self::INDEX_NAME, \Elastica\Request::GET, [] );
+		$resp = $this->client->request( '_alias/' . $this->indexName, \Elastica\Request::GET, [] );
 		$indexName = null;
 		foreach( $resp->getData() as $index => $aliases ) {
-			if ( isset( $aliases['aliases'][self::INDEX_NAME] ) ) {
+			if ( isset( $aliases['aliases'][$this->indexName] ) ) {
 				if ( $indexName !== null ) {
-					throw new \Exception( "Multiple indices are aliased with " . self::INDEX_NAME . ", please fix manually." );
+					throw new \Exception( "Multiple indices are aliased with " . $this->indexName . ", please fix manually." );
 				}
 				$indexName = $index;
 			}
@@ -336,7 +344,7 @@ class MetaStoreIndex {
 		// type for storing the metastore version.
 		$reindex = [
 			'source' => [
-				'index' => self::INDEX_NAME,
+				'index' => $this->indexName,
 				'query' => [
 					'bool' => [
 						'must_not' => [
@@ -369,7 +377,7 @@ class MetaStoreIndex {
 		}
 		// Old mw_cirrus_versions exists, if mw_cirrus_metastore alias does not
 		// exist we must create it
-		if ( !$this->client->getIndex( self::INDEX_NAME )->exists() ) {
+		if ( !$this->client->getIndex( $this->indexName )->exists() ) {
 			$this->log( "Adding transition alias to " . self::OLD_INDEX_NAME . "\n" );
 			// Old one exists but new one does not
 			// we need to create an alias
@@ -457,7 +465,8 @@ class MetaStoreIndex {
 	 * @return \Elastica\Type $type
 	 */
 	public static function getVersionType( Connection $connection ) {
-		return $connection->getIndex( self::INDEX_NAME )->getType( self::VERSION_TYPE );
+		global $wgCirrusSearchMetastoreIndexName;
+		return $connection->getIndex( $wgCirrusSearchMetastoreIndexName )->getType( self::VERSION_TYPE );
 	}
 
 	/**
@@ -466,7 +475,8 @@ class MetaStoreIndex {
 	 * @return \Elastica\Type $type
 	 */
 	public static function getSanitizeType( Connection $connection ) {
-		return $connection->getIndex( self::INDEX_NAME )->getType( self::SANITIZE_TYPE );
+		global $wgCirrusSearchMetastoreIndexName;
+		return $connection->getIndex( $wgCirrusSearchMetastoreIndexName )->getType( self::SANITIZE_TYPE );
 	}
 
 	/**
@@ -475,7 +485,8 @@ class MetaStoreIndex {
 	 * @return \Elastica\Type $type
 	 */
 	public static function getFrozenType( Connection $connection ) {
-		return $connection->getIndex( self::INDEX_NAME )->getType( self::FROZEN_TYPE );
+		global $wgCirrusSearchMetastoreIndexName;
+		return $connection->getIndex( $wgCirrusSearchMetastoreIndexName )->getType( self::FROZEN_TYPE );
 	}
 
 	/**
@@ -484,7 +495,8 @@ class MetaStoreIndex {
 	 * @return \Elastica\Type $type
 	 */
 	private static function getInternalType( Connection $connection ) {
-		return $connection->getIndex( self::INDEX_NAME )->getType( self::INTERNAL_TYPE );
+		global $wgCirrusSearchMetastoreIndexName;
+		return $connection->getIndex( $wgCirrusSearchMetastoreIndexName )->getType( self::INTERNAL_TYPE );
 	}
 
 	/**
@@ -493,7 +505,8 @@ class MetaStoreIndex {
 	 * @return bool
 	 */
 	public static function cirrusReady( Connection $connection ) {
-		return $connection->getIndex( self::INDEX_NAME )->exists() ||
+		global $wgCirrusSearchMetastoreIndexName;
+		return $connection->getIndex( $wgCirrusSearchMetastoreIndexName )->exists() ||
 			$connection->getIndex( self::OLD_INDEX_NAME )->exists();
 	}
 
@@ -503,6 +516,7 @@ class MetaStoreIndex {
 	 * [0, 0] means that the metastore has never been created
 	 */
 	public static function getMetastoreVersion( Connection $connection ) {
+		global $wgCirrusSearchMetastoreIndexName;
 		try {
 			$doc = self::getInternalType( $connection )->getDocument( self::METASTORE_VERSION_DOCID );
 		} catch ( \Elastica\Exception\NotFoundException $e ) {
@@ -513,7 +527,7 @@ class MetaStoreIndex {
 			if ( isset( $fullError['type'] )
 				&& $fullError['type'] === 'index_not_found_exception'
 				&& isset( $fullError['index'] )
-				&& $fullError['index'] === self::INDEX_NAME
+				&& $fullError['index'] === $wgCirrusSearchMetastoreIndexName
 			) {
 				return [ 0, 0 ];
 			}

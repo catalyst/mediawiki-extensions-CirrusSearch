@@ -1474,6 +1474,15 @@ Workarounds:
   to enable this workaround if you are running such version:
   'query_string_max_determinized_states' => true
 
+; $wgCirrusSearchMetastoreIndexName
+
+Default:
+  $wgCirrusSearchMetastoreIndexName = \Maintenance\MetaStoreIndex::DEFAULT_INDEX_NAME;
+
+Metastore index name. If your elasticsearch cluster is shared with multiple
+MediaWiki instances and other projects, or has more complex ACL, you may need
+to set this to a different value.
+
 ; $wgCirrusSearchFieldTypes
 
 Default:

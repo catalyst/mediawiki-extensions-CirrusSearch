@@ -95,10 +95,10 @@ class CheckIndexes extends Maintenance {
 	}
 
 	private function checkMetastore( array $aliases ) {
-		$this->in( 'mw_cirrus_metastore' );
-		if ( isset( $aliases[ 'mw_cirrus_metastore' ] ) ) {
-			$this->check( 'alias count', 1, count( $aliases[ 'mw_cirrus_metastore' ] ) );
-			foreach ( $aliases[ 'mw_cirrus_metastore'] as $indexName ) {
+		$this->in( $wgCirrusSearchMetastoreIndexName );
+		if ( isset( $aliases[ $wgCirrusSearchMetastoreIndexName ] ) ) {
+			$this->check( 'alias count', 1, count( $aliases[ $wgCirrusSearchMetastoreIndexName ] ) );
+			foreach ( $aliases[ $wgCirrusSearchMetastoreIndexName ] as $indexName ) {
 				$this->checkIndex( $indexName, 1 );
 			}
 		} else {
@@ -239,11 +239,12 @@ class CheckIndexes extends Maintenance {
 	}
 
 	private function ensureCirrusInfoFetched() {
+		global $wgCirrusSearchMetastoreIndexName;
 		if ( $this->cirrusInfo === null ) {
 			$query = new \Elastica\Query();
 			$query->setSize( 5000 );
 			$res = $this->getConnection()
-				->getIndex( 'mw_cirrus_metastore' )
+				->getIndex( $wgCirrusSearchMetastoreIndexName )
 				->getType( 'version' )
 				->search( $query );
 			$this->cirrusInfo = [];
